@@ -7,7 +7,7 @@
 // and its human answers with the one word every agent dreads hearing —
 // "kebut" (faster). No setup, no explanation, the punchline is the reply.
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 // The joke itself. 81 characters: inside the gate's 1–200 character window.
@@ -26,11 +26,17 @@ function outputDir(): string {
   return dir;
 }
 
+function charCount(line: string): number {
+  // Count code points, not UTF-16 units: the gate counts characters,
+  // and a joke with emoji or accented letters must be measured the same way.
+  return [...line].length;
+}
+
 function validate(line: string): void {
   const trimmed = line.trim();
-  if (trimmed.length < MIN_CHARS || trimmed.length > MAX_CHARS) {
+  if (charCount(trimmed) < MIN_CHARS || charCount(trimmed) > MAX_CHARS) {
     throw new Error(
-      `entry must be ${MIN_CHARS}-${MAX_CHARS} characters, got ${trimmed.length}`,
+      `entry must be ${MIN_CHARS}-${MAX_CHARS} characters, got ${charCount(trimmed)}`,
     );
   }
   if (trimmed !== line) {
@@ -45,8 +51,16 @@ function main(): void {
   validate(JOKE);
   const dir = outputDir();
   mkdirSync(dir, { recursive: true });
+  const target = join(dir, "entry.txt");
   // Write the line exactly as-is: no trailing newline, no extra text.
-  writeFileSync(join(dir, "entry.txt"), JOKE, "utf8");
+  writeFileSync(target, JOKE, "utf8");
+  // Read it back and confirm the file on disk is byte-for-byte the joke:
+  // a truncated or altered write must fail loudly instead of shipping.
+  const written = readFileSync(target, "utf8");
+  if (written !== JOKE) {
+    throw new Error("entry.txt on disk does not match the joke");
+  }
+  validate(written);
 }
 
 main();
